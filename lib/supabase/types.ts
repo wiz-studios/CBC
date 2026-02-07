@@ -14,6 +14,7 @@ export type Database = {
           address: string | null
           county: string | null
           sub_county: string | null
+          logo_url: string | null
           school_type: 'PRIMARY' | 'SECONDARY' | 'BOTH'
           curriculum_version: string
           created_at: string

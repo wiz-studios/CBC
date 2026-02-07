@@ -8,6 +8,7 @@ import { getAcademicTerms } from '@/lib/actions/terms'
 import { getClasses } from '@/lib/actions/classes'
 import { getSubjects, seedSeniorSchoolSubjects } from '@/lib/actions/subjects'
 import { getTeachers, seedKerichoTeachersAndAssignments } from '@/lib/actions/teachers'
+import { getMySchool } from '@/lib/actions/schools'
 import {
   createTimetableSlot,
   deleteTimetableSlot,
@@ -49,6 +50,7 @@ import { Download, Edit, Plus, Sparkles, Trash2, Wand2 } from 'lucide-react'
 type TermRow = Database['public']['Tables']['academic_terms']['Row']
 type ClassRow = Database['public']['Tables']['classes']['Row']
 type SubjectRow = Database['public']['Tables']['subjects']['Row']
+type SchoolRow = Database['public']['Tables']['schools']['Row']
 
 type TeacherOption = {
   id: string
@@ -213,6 +215,7 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
   const [classes, setClasses] = useState<ClassRow[]>([])
   const [subjects, setSubjects] = useState<SubjectRow[]>([])
   const [teachers, setTeachersList] = useState<TeacherOption[]>([])
+  const [schoolProfile, setSchoolProfile] = useState<SchoolRow | null>(null)
 
   const [selectedTermId, setSelectedTermId] = useState<string>('')
   const [filterClassId, setFilterClassId] = useState<string>('all')
@@ -278,21 +281,24 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
   const canGoStep3 = step1Valid && electivesReady
 
   const loadLookups = useCallback(async () => {
-    const [termsResult, classesResult, subjectsResult, teachersResult] = await Promise.all([
+    const [termsResult, classesResult, subjectsResult, teachersResult, schoolResult] = await Promise.all([
       getAcademicTerms(),
       getClasses(),
       getSubjects(),
       canManage ? getTeachers() : Promise.resolve({ success: true, teachers: [] } as any),
+      getMySchool(),
     ])
 
     if (!termsResult.success) throw new Error(termsResult.error.message)
     if (!classesResult.success) throw new Error(classesResult.error.message)
     if (!subjectsResult.success) throw new Error(subjectsResult.error.message)
     if (!teachersResult.success) throw new Error(teachersResult.error.message)
+    if (!schoolResult.success) throw new Error(schoolResult.error.message)
 
     setTerms(termsResult.terms)
     setClasses(classesResult.classes)
     setSubjects(subjectsResult.subjects)
+    setSchoolProfile(schoolResult.school)
 
     const teacherOptions: TeacherOption[] = (teachersResult.teachers ?? []).map((t: any) => ({
       id: t.id,
@@ -734,12 +740,24 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       mode: 'class' | 'teacher' | 'full'
     ) => {
       const { head, body, breakColumnIndexes } = buildPdfMatrix(items, mode)
+      const logoUrl = schoolProfile?.logo_url ?? ''
+      const hasLogo = logoUrl.startsWith('data:image/jpeg') || logoUrl.startsWith('data:image/jpg')
+      const titleX = hasLogo ? 96 : 40
+
+      if (hasLogo) {
+        try {
+          doc.addImage(logoUrl, 'JPEG', 40, 22, 44, 44)
+        } catch {
+          // Ignore logo rendering errors to avoid breaking the PDF.
+        }
+      }
+
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(17)
-      doc.text(title, 40, 36)
+      doc.text(title, titleX, 36)
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(10.5)
-      doc.text(subtitle, 40, 56)
+      doc.text(subtitle, titleX, 56)
 
       autoTable(doc, {
         startY: 72,
@@ -769,7 +787,7 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
         },
       })
     },
-    [buildPdfMatrix]
+    [buildPdfMatrix, schoolProfile]
   )
 
   const downloadPdf = useCallback(
@@ -804,7 +822,11 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       return
     }
     setDownloading('full')
-    const result = await getTimetableSlots({ academicTermId: selectedTermId })
+    const classFilter = filterClassId !== 'all' ? filterClassId : undefined
+    const result = await getTimetableSlots({
+      academicTermId: selectedTermId,
+      classId: classFilter,
+    })
     if (!result.success) {
       toast.error('Download failed', { description: result.error.message })
       setDownloading('none')
@@ -821,19 +843,28 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       ? `Term: ${currentTerm.year} T${currentTerm.term}${currentTerm.is_current ? ' (Current)' : ''}`
       : 'Term: Not set'
 
-    const groupMap = new Map<string, TimetableSlotWithRefs[]>()
-    slotsToUse.forEach((slot) => {
-      const key = slot.class_id
-      const existing = groupMap.get(key) ?? []
-      existing.push(slot)
-      groupMap.set(key, existing)
-    })
+    let groups: Array<{ label: string; items: TimetableSlotWithRefs[] }>
+    if (classFilter) {
+      groups = [{ label: classLabel(classFilter), items: slotsToUse }]
+    } else {
+      const groupMap = new Map<string, TimetableSlotWithRefs[]>()
+      slotsToUse.forEach((slot) => {
+        const key = slot.class_id
+        const existing = groupMap.get(key) ?? []
+        existing.push(slot)
+        groupMap.set(key, existing)
+      })
 
-    const groups = Array.from(groupMap.entries())
-      .map(([classId, items]) => ({ label: classLabel(classId), items }))
-      .sort((a, b) => a.label.localeCompare(b.label))
+      groups = Array.from(groupMap.entries())
+        .map(([classId, items]) => ({ label: classLabel(classId), items }))
+        .sort((a, b) => a.label.localeCompare(b.label))
+    }
 
-    await downloadPdf(groups, getDownloadFileName('full_weekly'), subtitle, 'class')
+    const filenameBase = classFilter
+      ? sanitizeFilename(`Class_Weekly_Timetable_${classLabel(classFilter)}`)
+      : 'full_weekly'
+
+    await downloadPdf(groups, getDownloadFileName(filenameBase), subtitle, 'class')
     setDownloading('none')
   }
 

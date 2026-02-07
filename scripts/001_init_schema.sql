@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS schools (
   address TEXT,
   county VARCHAR(100),
   sub_county VARCHAR(100),
+  logo_url TEXT,
   school_type VARCHAR(50) NOT NULL CHECK (school_type IN ('PRIMARY', 'SECONDARY', 'BOTH')),
   curriculum_version VARCHAR(50) DEFAULT 'CBC2023',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

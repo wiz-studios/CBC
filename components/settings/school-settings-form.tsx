@@ -26,6 +26,7 @@ type FormState = {
   sub_county: string
   school_type: SchoolType
   curriculum_version: string
+  logo_url: string
 }
 
 export function SchoolSettingsForm({ canEdit }: { canEdit: boolean }) {
@@ -33,6 +34,7 @@ export function SchoolSettingsForm({ canEdit }: { canEdit: boolean }) {
   const [saving, setSaving] = useState(false)
   const [school, setSchool] = useState<SchoolRow | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
+  const [logoError, setLogoError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -57,6 +59,7 @@ export function SchoolSettingsForm({ canEdit }: { canEdit: boolean }) {
       sub_county: result.school.sub_county ?? '',
       school_type: result.school.school_type,
       curriculum_version: result.school.curriculum_version ?? 'CBC2023',
+      logo_url: result.school.logo_url ?? '',
     })
     setLoading(false)
   }, [])
@@ -79,6 +82,7 @@ export function SchoolSettingsForm({ canEdit }: { canEdit: boolean }) {
       sub_county: form.sub_county.trim() || null,
       school_type: form.school_type,
       curriculum_version: form.curriculum_version.trim() || 'CBC2023',
+      logo_url: form.logo_url.trim() || null,
     })
 
     if (!result.success) {
@@ -90,6 +94,32 @@ export function SchoolSettingsForm({ canEdit }: { canEdit: boolean }) {
     toast.success('School settings updated')
     setSaving(false)
     await load()
+  }
+
+  const handleLogoChange = (file: File | null) => {
+    if (!file) return
+    setLogoError('')
+
+    if (!['image/jpeg', 'image/jpg'].includes(file.type)) {
+      setLogoError('Only JPG or JPEG files are allowed.')
+      return
+    }
+    if (file.size > 600_000) {
+      setLogoError('Keep the logo under 600KB.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      if (!result) {
+        setLogoError('Failed to read logo file.')
+        return
+      }
+      setForm((prev) => (prev ? { ...prev, logo_url: result } : prev))
+    }
+    reader.onerror = () => setLogoError('Failed to read logo file.')
+    reader.readAsDataURL(file)
   }
 
   if (loading) {
@@ -165,6 +195,42 @@ export function SchoolSettingsForm({ canEdit }: { canEdit: boolean }) {
                 onChange={(e) => setForm((p) => (p ? { ...p, motto: e.target.value } : p))}
                 disabled={!canEdit || saving}
               />
+            </div>
+
+            <div className="space-y-3 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <Label>School logo (JPG/JPEG)</Label>
+                {form.logo_url ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setForm((p) => (p ? { ...p, logo_url: '' } : p))}
+                    disabled={!canEdit || saving}
+                  >
+                    Remove logo
+                  </Button>
+                ) : null}
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="h-20 w-20 rounded-xl border border-dashed border-border/70 bg-muted/30 flex items-center justify-center text-xs text-muted-foreground">
+                  {form.logo_url ? (
+                    <img src={form.logo_url} alt="School logo" className="h-full w-full object-contain rounded-xl" />
+                  ) : (
+                    'No logo'
+                  )}
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Input
+                    type="file"
+                    accept="image/jpeg,image/jpg"
+                    onChange={(e) => handleLogoChange(e.target.files?.[0] ?? null)}
+                    disabled={!canEdit || saving}
+                  />
+                  <p className="text-xs text-muted-foreground">Recommended: square JPG, under 600KB.</p>
+                  {logoError ? <p className="text-xs text-red-600">{logoError}</p> : null}
+                </div>
+              </div>
             </div>
           </div>
         </div>

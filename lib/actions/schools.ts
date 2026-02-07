@@ -380,6 +380,27 @@ export async function updateMySchool(updates: Partial<SchoolRow>): Promise<Schoo
       return { success: false, error: { code: 'forbidden', message: 'Only admins can update school settings.' } }
     }
 
+    if (typeof (updates as any).logo_url !== 'undefined') {
+      const value = (updates as any).logo_url as string | null
+      if (value) {
+        const isJpeg = value.startsWith('data:image/jpeg') || value.startsWith('data:image/jpg')
+        if (!isJpeg) {
+          return {
+            success: false,
+            error: { code: 'invalid_logo', message: 'Logo must be a JPG or JPEG image.' },
+          }
+        }
+        const base64 = value.split(',')[1] ?? ''
+        const bytes = Math.ceil((base64.length * 3) / 4)
+        if (bytes > 600_000) {
+          return {
+            success: false,
+            error: { code: 'logo_too_large', message: 'Logo is too large. Keep it under 600KB.' },
+          }
+        }
+      }
+    }
+
     const patch: Partial<SchoolRow> = {}
     const allowedKeys: (keyof SchoolRow)[] = [
       'name',
@@ -392,6 +413,7 @@ export async function updateMySchool(updates: Partial<SchoolRow>): Promise<Schoo
       'sub_county',
       'school_type',
       'curriculum_version',
+      'logo_url',
     ]
 
     for (const key of allowedKeys) {
