@@ -7,7 +7,7 @@ import type { Database } from '@/lib/supabase/types'
 import { getAcademicTerms } from '@/lib/actions/terms'
 import { getClasses } from '@/lib/actions/classes'
 import { getSubjects, seedSeniorSchoolSubjects } from '@/lib/actions/subjects'
-import { getTeachers } from '@/lib/actions/teachers'
+import { getTeachers, seedKerichoTeachersAndAssignments } from '@/lib/actions/teachers'
 import {
   createTimetableSlot,
   deleteTimetableSlot,
@@ -168,6 +168,8 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
 
   const [seedOpen, setSeedOpen] = useState(false)
   const [seedSaving, setSeedSaving] = useState(false)
+  const [seedTeachersOpen, setSeedTeachersOpen] = useState(false)
+  const [seedTeachersSaving, setSeedTeachersSaving] = useState(false)
   const [autoOpen, setAutoOpen] = useState(false)
   const [autoSaving, setAutoSaving] = useState(false)
   const [autoDayTemplate, setAutoDayTemplate] = useState<'kenya_fixed' | 'continuous'>('kenya_fixed')
@@ -482,6 +484,30 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
     }
   }
 
+  const handleSeedKerichoTeachers = async () => {
+    setSeedTeachersSaving(true)
+    try {
+      const result = await withTimeout(
+        seedKerichoTeachersAndAssignments(),
+        60_000,
+        'Teacher seeding timed out. Please check server logs and refresh.'
+      )
+      if (!result.success) {
+        toast.error('Seeding failed', { description: result.error.message })
+        return
+      }
+      toast.success('Teachers seeded', {
+        description: `${result.created} created, ${result.existing} existing. ${result.assignments} assignments.`,
+      })
+      setSeedTeachersOpen(false)
+      await loadLookups()
+    } catch (error) {
+      toast.error('Seeding failed', { description: getErrorMessage(error, 'Unable to seed teachers.') })
+    } finally {
+      setSeedTeachersSaving(false)
+    }
+  }
+
   const handleAutoBuild = async () => {
     if (!selectedTermId) {
       toast.error('Select an academic term first')
@@ -710,14 +736,14 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
                   : 'Download my timetable'}
             </Button>
 
-            {canManage ? (
-              <Dialog open={seedOpen} onOpenChange={setSeedOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="gap-2">
-                    <Sparkles className="h-4 w-4" />
-                    Seed Senior subjects
-                  </Button>
-                </DialogTrigger>
+          {canManage ? (
+            <Dialog open={seedOpen} onOpenChange={setSeedOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  Seed Senior subjects
+                </Button>
+              </DialogTrigger>
                 <DialogContent className="max-w-lg">
                   <DialogHeader>
                     <DialogTitle>Seed Senior School subjects (G10-12)</DialogTitle>
@@ -1098,6 +1124,44 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
                     </div>
                   </div>
                 </div>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {canManage ? (
+            <Dialog open={seedTeachersOpen} onOpenChange={setSeedTeachersOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  Seed Kericho teachers
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Seed Kericho teachers</DialogTitle>
+                  <DialogDescription>
+                    Creates 14 teachers (70/30 male-female) and assigns subjects to Grade 10-12 for the current term.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+                    Default password: <span className="font-medium text-foreground">Kericho2026!</span>
+                  </div>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Subjects: ENG, KIS, MATH, CSL, BIO, CHEM, PHY, HIST, GEO, CRE, BUS, AGR, COMP, LIT, PE, ICT</li>
+                    <li>Assignments created per class and term (teacher_class_assignments)</li>
+                  </ul>
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setSeedTeachersOpen(false)} disabled={seedTeachersSaving}>
+                    Cancel
+                  </Button>
+                  <Button onClick={() => void handleSeedKerichoTeachers()} disabled={seedTeachersSaving}>
+                    {seedTeachersSaving ? 'Seeding...' : 'Seed teachers'}
+                  </Button>
+                </DialogFooter>
               </DialogContent>
             </Dialog>
           ) : null}

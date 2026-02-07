@@ -204,49 +204,51 @@ export default async function DashboardPage() {
         />
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>System Status</CardTitle>
-            <CardDescription>Current configuration and health checks</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <StatusRow label="User Account" value="Active" icon={CheckCircle2} />
-            <StatusRow label="Database" value={databaseStatus} icon={Activity} />
-            <StatusRow label={isSuperAdmin ? 'Schools' : 'School Setup'} value={schoolsStatus} icon={Building2} />
-            <StatusRow label={isSuperAdmin ? 'Analytics' : 'Timetable'} value={moduleStatus} icon={Clock} />
-          </CardContent>
-        </Card>
+      {user.role === 'SCHOOL_ADMIN' ? (
+        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle>System Status</CardTitle>
+              <CardDescription>Current configuration and health checks</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <StatusRow label="User Account" value="Active" icon={CheckCircle2} />
+              <StatusRow label="Database" value={databaseStatus} icon={Activity} />
+              <StatusRow label={isSuperAdmin ? 'Schools' : 'School Setup'} value={schoolsStatus} icon={Building2} />
+              <StatusRow label={isSuperAdmin ? 'Analytics' : 'Timetable'} value={moduleStatus} icon={Clock} />
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Getting Started</CardTitle>
-            <CardDescription>Recommended setup sequence</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {[
-              'Run database migrations (see DATABASE_SETUP.md)',
-              isSuperAdmin
-                ? 'Create (or approve) the first school'
-                : 'Create school information in Admin Settings',
-              isSuperAdmin
-                ? 'Create a SCHOOL_ADMIN user for that school'
-                : 'Set up academic terms and classes',
-              isSuperAdmin
-                ? 'Review platform analytics (adoption + activity)'
-                : 'Add teachers and students',
-              isSuperAdmin ? 'Configure system settings and security' : 'Create timetables',
-            ].map((step, index) => (
-              <div key={step} className="flex items-start gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
-                  {index + 1}
+          <Card>
+            <CardHeader>
+              <CardTitle>Getting Started</CardTitle>
+              <CardDescription>Recommended setup sequence</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {[
+                'Run database migrations (see DATABASE_SETUP.md)',
+                isSuperAdmin
+                  ? 'Create (or approve) the first school'
+                  : 'Create school information in Admin Settings',
+                isSuperAdmin
+                  ? 'Create a SCHOOL_ADMIN user for that school'
+                  : 'Set up academic terms and classes',
+                isSuperAdmin
+                  ? 'Review platform analytics (adoption + activity)'
+                  : 'Add teachers and students',
+                isSuperAdmin ? 'Configure system settings and security' : 'Create timetables',
+              ].map((step, index) => (
+                <div key={step} className="flex items-start gap-3">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+                    {index + 1}
+                  </div>
+                  <div className="text-muted-foreground">{step}</div>
                 </div>
-                <div className="text-muted-foreground">{step}</div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
 
       <Card>
         <CardHeader>
