@@ -567,7 +567,7 @@ export async function getTimetableSlots(params: {
         classes(id, name, grade_level, stream),
         subjects(id, name, code),
         academic_terms(id, year, term, is_current),
-        teachers(id, user_id, users(first_name, last_name, email))
+        teachers(id, user_id, users(first_name, last_name, email, honorific))
       `
       )
       .eq('academic_term_id', params.academicTermId)

@@ -51,6 +51,7 @@ export type Database = {
           email: string
           first_name: string
           last_name: string
+          honorific: string | null
           phone: string | null
           id_number: string | null
           status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'

@@ -191,6 +191,7 @@ export async function getUsers(params?: {
 export async function createUser(input: {
   first_name: string
   last_name: string
+  honorific?: string | null
   email: string
   password: string
   role: SystemRoleName
@@ -214,6 +215,7 @@ export async function createUser(input: {
 
     const first_name = input.first_name.trim()
     const last_name = input.last_name.trim()
+    const honorific = input.honorific?.trim() || null
     const email = input.email.trim().toLowerCase()
     const password = input.password
 
@@ -252,6 +254,7 @@ export async function createUser(input: {
         email,
         first_name,
         last_name,
+        honorific,
         status: 'ACTIVE',
         auth_id: authData.user.id,
       })

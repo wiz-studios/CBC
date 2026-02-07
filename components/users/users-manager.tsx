@@ -40,6 +40,7 @@ export function UsersManager({ scope }: { scope: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' 
   const [createForm, setCreateForm] = useState({
     first_name: '',
     last_name: '',
+    honorific: '',
     email: '',
     password: '',
     role: scope === 'SUPER_ADMIN' ? 'SCHOOL_ADMIN' : 'TEACHER',
@@ -112,6 +113,7 @@ export function UsersManager({ scope }: { scope: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' 
   const handleCreate = async () => {
     const first_name = createForm.first_name.trim()
     const last_name = createForm.last_name.trim()
+    const honorific = createForm.honorific.trim() || null
     const email = createForm.email.trim()
     const password = createForm.password
     const role = createForm.role as any
@@ -136,6 +138,7 @@ export function UsersManager({ scope }: { scope: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' 
     const result = await createUser({
       first_name,
       last_name,
+      honorific,
       email,
       password,
       role,
@@ -154,6 +157,7 @@ export function UsersManager({ scope }: { scope: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' 
     setCreateForm({
       first_name: '',
       last_name: '',
+      honorific: '',
       email: '',
       password: '',
       role: scope === 'SUPER_ADMIN' ? 'SCHOOL_ADMIN' : 'TEACHER',
@@ -258,6 +262,27 @@ export function UsersManager({ scope }: { scope: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' 
                         onChange={(e) => setCreateForm((p) => ({ ...p, last_name: e.target.value }))}
                         disabled={creating}
                       />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Honorific</Label>
+                      <Select
+                        value={createForm.honorific || 'NONE'}
+                        onValueChange={(v) => setCreateForm((p) => ({ ...p, honorific: v === 'NONE' ? '' : v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NONE">None</SelectItem>
+                          <SelectItem value="Mr">Mr</SelectItem>
+                          <SelectItem value="Mrs">Mrs</SelectItem>
+                          <SelectItem value="Ms">Ms</SelectItem>
+                          <SelectItem value="Dr">Dr</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 

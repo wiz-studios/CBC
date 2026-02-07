@@ -887,13 +887,13 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       setDownloading('none')
       return
     }
-    const teacherLabel = canManage
+  const teacherLabel = canManage
       ? teachers.find((t) => t.id === filterTeacherId)?.label ?? 'Teacher'
       : result.slots[0]?.teachers?.users
         ? `${result.slots[0].teachers.users.first_name} ${result.slots[0].teachers.users.last_name}`
         : 'Teacher'
     const teacherName = stripEmailLabel(teacherLabel)
-    const honorific = getHonorificFromName(teacherName)
+    const honorific = result.slots[0]?.teachers?.users?.honorific?.trim() || getHonorificFromName(teacherName)
     const titledName = `${honorific} ${teacherName}`.trim()
     if (result.slots.length === 0) {
       toast.error('No timetable slots available to download')
@@ -982,7 +982,11 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
                 disabled={!selectedTermId || downloading !== 'none'}
               >
                 <Download className="h-4 w-4" />
-                {downloading === 'full' ? 'Preparing PDF...' : 'Download full PDF'}
+                {downloading === 'full'
+                  ? 'Preparing PDF...'
+                  : filterClassId !== 'all'
+                    ? 'Download class PDF'
+                    : 'Download full PDF'}
               </Button>
             ) : null}
 

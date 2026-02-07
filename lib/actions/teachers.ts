@@ -283,11 +283,13 @@ export async function seedKerichoTeachersAndAssignments(): Promise<SeedKerichoTe
       const firstName = def.gender === 'Male' ? KERICHO_MALE_NAMES[nameIndex] : KERICHO_FEMALE_NAMES[nameIndex]
       const lastName = KERICHO_LAST_NAMES[index % KERICHO_LAST_NAMES.length]
       const email = `teacher${String(index + 1).padStart(2, '0')}@kh.co.ke`
+      const honorific = def.gender === 'Female' ? 'Mrs' : 'Mr'
       return {
         ...def,
         first_name: firstName,
         last_name: lastName,
         email,
+        honorific,
       }
     })
 
@@ -332,6 +334,7 @@ export async function seedKerichoTeachersAndAssignments(): Promise<SeedKerichoTe
             email: seed.email,
             first_name: seed.first_name,
             last_name: seed.last_name,
+            honorific: seed.honorific,
             status: 'ACTIVE',
             auth_id: userId,
           })
