@@ -108,6 +108,46 @@ function getErrorMessage(error: unknown, fallback = 'Unexpected error') {
   return fallback
 }
 
+const FEMALE_NAME_HINTS = new Set(
+  [
+    'mercy',
+    'faith',
+    'joy',
+    'grace',
+    'esther',
+    'purity',
+    'hannah',
+    'dorcas',
+    'janet',
+    'gladys',
+    'nancy',
+    'lydia',
+    'mary',
+    'jane',
+    'anne',
+    'ivy',
+  ].map((n) => n.toLowerCase())
+)
+
+function getHonorificFromName(fullName: string) {
+  const cleaned = fullName.replace(/\(.*\)$/g, '').trim()
+  const first = cleaned.split(/\s+/)[0]?.toLowerCase() ?? ''
+  if (first && FEMALE_NAME_HINTS.has(first)) return 'Mrs'
+  return 'Mr'
+}
+
+function stripEmailLabel(label: string) {
+  return label.replace(/\s*\(.*\)$/, '').trim()
+}
+
+function sanitizeFilename(value: string) {
+  return value
+    .replace(/\s+/g, '_')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
 type TimeRow = {
   start: string
   end: string
@@ -651,20 +691,37 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
 
   const weekRows = useMemo(() => buildWeekRows(slots, weekViewMode), [buildWeekRows, slots, weekViewMode])
 
-  const buildPdfRows = useCallback(
+  const buildPdfMatrix = useCallback(
     (items: TimetableSlotWithRefs[], mode: 'class' | 'teacher' | 'full') => {
-      const rows = buildWeekRows(items, mode)
-      const breakRowIndexes = new Set<number>()
-      const body = rows.map((row, index) => {
-        if (row.isBreak) breakRowIndexes.add(index)
-        return [
-          row.label,
-          ...DAYS.map((day) => (row.isBreak ? row.breakLabel : row.cells[day.value] || '')),
-        ]
+      const timeRows = buildTimeRows(items)
+      const slotMap = new Map<string, TimetableSlotWithRefs[]>()
+
+      items.forEach((slot) => {
+        const key = `${slot.day_of_week}-${slot.start_time}-${slot.end_time}`
+        const existing = slotMap.get(key) ?? []
+        existing.push(slot)
+        slotMap.set(key, existing)
       })
-      return { body, breakRowIndexes }
+
+      const breakColumnIndexes = new Set<number>()
+      const head = ['Day', ...timeRows.map((row, index) => {
+        if (row.isBreak) breakColumnIndexes.add(index + 1)
+        return row.isBreak ? `${row.label}\n${row.breakLabel}` : row.label
+      })]
+
+      const body = DAYS.map((day) => {
+        const rowCells = timeRows.map((row) => {
+          if (row.isBreak) return row.breakLabel
+          const key = `${day.value}-${row.start}-${row.end}`
+          const matches = slotMap.get(key) ?? []
+          return matches.map((slot) => formatSlotForMode(slot, mode)).join('\n')
+        })
+        return [day.label, ...rowCells]
+      })
+
+      return { head, body, breakColumnIndexes }
     },
-    [buildWeekRows]
+    [formatSlotForMode]
   )
 
   const renderPdfTable = useCallback(
@@ -676,31 +733,43 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       subtitle: string,
       mode: 'class' | 'teacher' | 'full'
     ) => {
-      const { body, breakRowIndexes } = buildPdfRows(items, mode)
+      const { head, body, breakColumnIndexes } = buildPdfMatrix(items, mode)
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(16)
+      doc.setFontSize(17)
       doc.text(title, 40, 36)
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(10)
-      doc.text(subtitle, 40, 54)
+      doc.setFontSize(10.5)
+      doc.text(subtitle, 40, 56)
 
       autoTable(doc, {
-        startY: 70,
-        head: [['Time', ...DAYS.map((d) => d.label)]],
+        startY: 72,
+        head: [head],
         body,
         theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 4, valign: 'middle' },
-        headStyles: { fillColor: [32, 32, 32], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 8.5, cellPadding: 5, valign: 'top', lineWidth: 0.6, lineColor: [220, 220, 220] },
+        headStyles: { fillColor: [25, 25, 25], textColor: 255, fontStyle: 'bold', halign: 'center' },
+        alternateRowStyles: { fillColor: [252, 252, 252] },
+        columnStyles: {
+          0: { fillColor: [245, 245, 245], fontStyle: 'bold', cellWidth: 70 },
+        },
         didParseCell: (data: any) => {
-          if (breakRowIndexes.has(data.row.index)) {
+          if (data.section === 'head' && breakColumnIndexes.has(data.column.index)) {
+            data.cell.styles.fillColor = [230, 230, 230]
+            data.cell.styles.textColor = [70, 70, 70]
+          }
+          if (data.section === 'body' && breakColumnIndexes.has(data.column.index)) {
             data.cell.styles.fillColor = [245, 245, 245]
             data.cell.styles.textColor = [80, 80, 80]
+            data.cell.styles.fontStyle = 'bold'
+          }
+          if (data.section === 'body' && data.column.index === 0) {
+            data.cell.styles.fillColor = [245, 245, 245]
             data.cell.styles.fontStyle = 'bold'
           }
         },
       })
     },
-    [buildPdfRows]
+    [buildPdfMatrix]
   )
 
   const downloadPdf = useCallback(
@@ -787,9 +856,14 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       setDownloading('none')
       return
     }
-    const teacherName = canManage
-      ? teachers.find((t) => t.id === filterTeacherId)?.label?.replace(/\s+/g, '_') ?? 'teacher'
-      : 'my_timetable'
+    const teacherLabel = canManage
+      ? teachers.find((t) => t.id === filterTeacherId)?.label ?? 'Teacher'
+      : result.slots[0]?.teachers?.users
+        ? `${result.slots[0].teachers.users.first_name} ${result.slots[0].teachers.users.last_name}`
+        : 'Teacher'
+    const teacherName = stripEmailLabel(teacherLabel)
+    const honorific = getHonorificFromName(teacherName)
+    const titledName = `${honorific} ${teacherName}`.trim()
     if (result.slots.length === 0) {
       toast.error('No timetable slots available to download')
       setDownloading('none')
@@ -798,7 +872,13 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
     const subtitle = currentTerm
       ? `Term: ${currentTerm.year} T${currentTerm.term}${currentTerm.is_current ? ' (Current)' : ''}`
       : 'Term: Not set'
-    await downloadPdf([{ label: teacherName.replace(/_/g, ' '), items: result.slots }], getDownloadFileName(teacherName), subtitle, 'teacher')
+    const filenameBase = sanitizeFilename(`${honorific}_Weekly_Timetable_${teacherName}`)
+    await downloadPdf(
+      [{ label: titledName, items: result.slots }],
+      getDownloadFileName(filenameBase),
+      subtitle,
+      'teacher'
+    )
     setDownloading('none')
   }
 
