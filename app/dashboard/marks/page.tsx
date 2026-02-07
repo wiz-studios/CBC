@@ -15,8 +15,8 @@ export default async function MarksPage() {
   const user = await getCurrentUser()
   if (!user) return null
 
-  const canManageTypes = user.role === 'SCHOOL_ADMIN' || user.role === 'HEAD_TEACHER'
-  const canManageSelections = user.role === 'SCHOOL_ADMIN' || user.role === 'HEAD_TEACHER'
+  const canManageTypes = user.role === 'SCHOOL_ADMIN'
+  const canManageSelections = user.role === 'SCHOOL_ADMIN'
   const staffRole =
     user.role === 'SCHOOL_ADMIN' || user.role === 'HEAD_TEACHER' || user.role === 'TEACHER'
       ? user.role

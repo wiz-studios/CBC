@@ -32,6 +32,16 @@ async function requireSignedIn(): Promise<AuthResult> {
   return { ok: true, user }
 }
 
+async function requireSchoolStaff(): Promise<AuthResult> {
+  const auth = await requireSignedIn()
+  if (!auth.ok) return auth
+  const allowed = auth.user.role === 'SCHOOL_ADMIN' || auth.user.role === 'HEAD_TEACHER' || auth.user.role === 'TEACHER'
+  if (!allowed) {
+    return { ok: false, error: { code: 'forbidden', message: 'School staff access required.' } }
+  }
+  return auth
+}
+
 async function requireSchoolAdmin(): Promise<AuthResult> {
   const auth = await requireSignedIn()
   if (!auth.ok) return auth
@@ -90,11 +100,11 @@ export async function createAcademicTerm(input: {
 }
 
 export async function getAcademicTerms(params?: { schoolId?: string }): Promise<TermsResult> {
-  const auth = await requireSignedIn()
+  const auth = await requireSchoolStaff()
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
-    const schoolId = auth.user.role === 'SUPER_ADMIN' && params?.schoolId ? params.schoolId : auth.user.school_id
+    const schoolId = auth.user.school_id
     const supabase = await createClient()
     const { data: terms, error } = await supabase
       .from('academic_terms')

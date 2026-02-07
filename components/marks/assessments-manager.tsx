@@ -88,8 +88,9 @@ export function AssessmentsManager({
   const [deleteTarget, setDeleteTarget] = useState<AssessmentRow | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const canDelete = role !== 'TEACHER'
-  const canPickTeacher = role !== 'TEACHER'
+  const canCreate = role === 'TEACHER' || role === 'HEAD_TEACHER'
+  const canDelete = role === 'SCHOOL_ADMIN'
+  const canPickTeacher = role === 'HEAD_TEACHER'
 
   const loadLookups = useCallback(async () => {
     const [termsResult, classesResult, subjectsResult, typesResult, teachersResult] = await Promise.all([
@@ -289,14 +290,15 @@ export function AssessmentsManager({
             </div>
           </div>
 
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={openCreate}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Assessment
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+          {canCreate ? (
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={openCreate}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Assessment
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Create assessment</DialogTitle>
                 <DialogDescription>Create a new assessment for mark entry.</DialogDescription>
@@ -410,16 +412,21 @@ export function AssessmentsManager({
               </div>
             </div>
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
-                Cancel
-              </Button>
-              <Button onClick={() => void handleCreate()} disabled={creating}>
-                {creating ? 'Creating...' : 'Create'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
+                  Cancel
+                </Button>
+                <Button onClick={() => void handleCreate()} disabled={creating}>
+                  {creating ? 'Creating...' : 'Create'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+            </Dialog>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Assessments are created by teachers or head teachers.
+            </div>
+          )}
       </div>
       </div>
 

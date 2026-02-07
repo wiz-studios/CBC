@@ -190,7 +190,7 @@ export function SubjectSelectionManager({ canManage }: { canManage: boolean }) {
   if (!canManage) {
     return (
       <div className="rounded-2xl border border-border/60 bg-card/70 py-10 text-center text-muted-foreground">
-        Only School Admin / Head Teacher can manage subject selections.
+        Only School Admin can manage subject selections.
       </div>
     )
   }

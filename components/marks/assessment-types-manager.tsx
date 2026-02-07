@@ -156,7 +156,7 @@ export function AssessmentTypesManager({ canManage }: { canManage: boolean }) {
   if (!canManage) {
     return (
       <div className="text-sm text-muted-foreground">
-        Only School Admin / Head Teacher can manage assessment types.
+        Only School Admin can manage assessment types.
       </div>
     )
   }

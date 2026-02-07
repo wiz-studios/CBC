@@ -104,6 +104,48 @@ async function requireSchoolAdmin(): Promise<AuthResult> {
   return auth
 }
 
+async function getTeacherIdForUser(userId: string, schoolId: string) {
+  const { data: teacher, error } = await admin
+    .from('teachers')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('school_id', schoolId)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!teacher) throw new Error('Teacher profile not found for this user.')
+  return (teacher as any).id as string
+}
+
+async function getTeacherClassIds(teacherId: string, termId?: string) {
+  let assignmentQuery = admin
+    .from('teacher_class_assignments')
+    .select('class_id')
+    .eq('teacher_id', teacherId)
+
+  let slotQuery = admin
+    .from('timetable_slots')
+    .select('class_id')
+    .eq('teacher_id', teacherId)
+
+  if (termId) {
+    assignmentQuery = assignmentQuery.eq('academic_term_id', termId)
+    slotQuery = slotQuery.eq('academic_term_id', termId)
+  }
+
+  const [{ data: assignments, error: assignmentError }, { data: slots, error: slotError }] = await Promise.all([
+    assignmentQuery,
+    slotQuery,
+  ])
+  if (assignmentError) throw assignmentError
+  if (slotError) throw slotError
+
+  const classIds = new Set<string>()
+  ;(assignments ?? []).forEach((row: any) => row.class_id && classIds.add(row.class_id))
+  ;(slots ?? []).forEach((row: any) => row.class_id && classIds.add(row.class_id))
+  return Array.from(classIds)
+}
+
 async function validateClassAndTermOwnership(schoolId: string, classId: string, termId: string): Promise<ActionError | null> {
   const [{ data: classRow, error: classError }, { data: termRow, error: termError }] = await Promise.all([
     admin.from('classes').select('id, school_id').eq('id', classId).single(),
@@ -134,6 +176,18 @@ export async function getStudents(params?: {
       .from('students')
       .select('*')
       .eq('school_id', auth.user.school_id)
+
+    if (auth.user.role === 'TEACHER') {
+      const teacherId = await getTeacherIdForUser(auth.user.id, auth.user.school_id)
+      const classIds = await getTeacherClassIds(
+        teacherId,
+        params?.termId && params.termId !== 'all' ? params.termId : undefined
+      )
+      if (classIds.length === 0) {
+        return { success: true, students: [] }
+      }
+      queryBuilder = queryBuilder.in('class_id', classIds)
+    }
 
     if (params?.classId && params.classId !== 'all') {
       queryBuilder = queryBuilder.eq('class_id', params.classId)

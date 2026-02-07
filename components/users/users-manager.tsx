@@ -165,7 +165,7 @@ export function UsersManager({ scope }: { scope: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' 
   const currentUserId = users.find((u) => u.role === 'SUPER_ADMIN')?.id
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="rounded-2xl border border-border/60 bg-card/70 p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-end">
@@ -193,7 +193,7 @@ export function UsersManager({ scope }: { scope: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' 
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
           <Dialog
             open={createOpen}
             onOpenChange={(open) => {
@@ -355,6 +355,16 @@ export function UsersManager({ scope }: { scope: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' 
             <Button variant="outline" onClick={() => void load()} disabled={loading}>
               Refresh
             </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{users.length} users</Badge>
+            <span className="text-muted-foreground">
+              {scope === 'SUPER_ADMIN' ? 'Platform-wide access' : 'School scope'}
+            </span>
+            {status !== 'all' ? <Badge variant="outline">Status: {status}</Badge> : null}
           </div>
         </div>
       </div>

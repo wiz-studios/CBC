@@ -185,6 +185,23 @@ export async function upsertLessonAttendanceBulk(
 // Get all attendance for a specific lesson session
 export async function getLessonSessionAttendance(lessonSessionId: string) {
   try {
+    const auth = await requireSignedIn()
+    if (!auth.ok) return []
+
+    if (auth.user.role === 'TEACHER') {
+      const teacherId = await getTeacherIdForUser(auth.user.id, auth.user.school_id)
+      const { data: lesson, error: lessonError } = await admin
+        .from('lesson_sessions')
+        .select('id, teacher_id')
+        .eq('id', lessonSessionId)
+        .single()
+
+      if (lessonError) throw lessonError
+      if (!lesson || (lesson as any).teacher_id !== teacherId) {
+        return []
+      }
+    }
+
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('attendance')

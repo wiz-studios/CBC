@@ -33,6 +33,16 @@ async function requireSignedIn(): Promise<AuthResult> {
   return { ok: true, user }
 }
 
+async function requireSchoolStaff(): Promise<AuthResult> {
+  const auth = await requireSignedIn()
+  if (!auth.ok) return auth
+  const allowed = auth.user.role === 'SCHOOL_ADMIN' || auth.user.role === 'HEAD_TEACHER' || auth.user.role === 'TEACHER'
+  if (!allowed) {
+    return { ok: false, error: { code: 'forbidden', message: 'School staff access required.' } }
+  }
+  return auth
+}
+
 async function requireSchoolAdmin(): Promise<AuthResult> {
   const auth = await requireSignedIn()
   if (!auth.ok) return auth
@@ -40,6 +50,39 @@ async function requireSchoolAdmin(): Promise<AuthResult> {
     return { ok: false, error: { code: 'forbidden', message: 'School admin access required.' } }
   }
   return auth
+}
+
+async function getTeacherIdForUser(userId: string, schoolId: string) {
+  const { data: teacher, error } = await admin
+    .from('teachers')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('school_id', schoolId)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!teacher) throw new Error('Teacher profile not found for this user.')
+  return (teacher as any).id as string
+}
+
+async function getTeacherClassIds(teacherId: string) {
+  const [{ data: assignments, error: assignmentError }, { data: slots, error: slotError }] = await Promise.all([
+    admin
+      .from('teacher_class_assignments')
+      .select('class_id')
+      .eq('teacher_id', teacherId),
+    admin
+      .from('timetable_slots')
+      .select('class_id')
+      .eq('teacher_id', teacherId),
+  ])
+  if (assignmentError) throw assignmentError
+  if (slotError) throw slotError
+
+  const classIds = new Set<string>()
+  ;(assignments ?? []).forEach((row: any) => row.class_id && classIds.add(row.class_id))
+  ;(slots ?? []).forEach((row: any) => row.class_id && classIds.add(row.class_id))
+  return Array.from(classIds)
 }
 
 export async function createClass(input: {
@@ -90,15 +133,24 @@ export async function getClasses(params?: {
   schoolId?: string
   includeInactive?: boolean
 }): Promise<ClassesResult> {
-  const auth = await requireSignedIn()
+  const auth = await requireSchoolStaff()
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
-    const schoolId = auth.user.role === 'SUPER_ADMIN' && params?.schoolId ? params.schoolId : auth.user.school_id
+    const schoolId = auth.user.school_id
     const includeInactive = params?.includeInactive ?? false
 
     const supabase = await createClient()
     let query = supabase.from('classes').select('*').eq('school_id', schoolId)
+
+    if (auth.user.role === 'TEACHER') {
+      const teacherId = await getTeacherIdForUser(auth.user.id, auth.user.school_id)
+      const classIds = await getTeacherClassIds(teacherId)
+      if (classIds.length === 0) {
+        return { success: true, classes: [] }
+      }
+      query = query.in('id', classIds)
+    }
 
     if (!includeInactive) query = query.eq('is_active', true)
 
@@ -115,14 +167,21 @@ export async function getClasses(params?: {
 
 export async function getClassById(id: string) {
   try {
+    const auth = await requireSchoolStaff()
+    if (!auth.ok) return null
+
     const supabase = await createClient()
-    const { data: classData, error } = await supabase
-      .from('classes')
-      .select('*')
-      .eq('id', id)
-      .single()
+    const { data: classData, error } = await supabase.from('classes').select('*').eq('id', id).single()
 
     if (error) throw error
+    if (!classData || (classData as any).school_id !== auth.user.school_id) return null
+
+    if (auth.user.role === 'TEACHER') {
+      const teacherId = await getTeacherIdForUser(auth.user.id, auth.user.school_id)
+      const classIds = await getTeacherClassIds(teacherId)
+      if (!classIds.includes((classData as any).id)) return null
+    }
+
     return classData as ClassRow
   } catch (error) {
     console.error('Get class by id error:', error)
@@ -194,7 +253,28 @@ export async function deleteClass(id: string): Promise<ClassResult> {
 
 export async function getClassStudents(classId: string) {
   try {
+    const auth = await requireSchoolStaff()
+    if (!auth.ok) return []
+
     const supabase = await createClient()
+
+    const { data: classRow, error: classError } = await supabase
+      .from('classes')
+      .select('id, school_id')
+      .eq('id', classId)
+      .single()
+    if (classError || !classRow || (classRow as any).school_id !== auth.user.school_id) {
+      return []
+    }
+
+    if (auth.user.role === 'TEACHER') {
+      const teacherId = await getTeacherIdForUser(auth.user.id, auth.user.school_id)
+      const classIds = await getTeacherClassIds(teacherId)
+      if (!classIds.includes(classId)) {
+        return []
+      }
+    }
+
     const { data: students, error } = await supabase
       .from('students')
       .select('*')

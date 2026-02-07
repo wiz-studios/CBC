@@ -482,55 +482,56 @@ export function StudentsManager({ canManage }: { canManage: boolean }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="rounded-2xl border border-border/60 bg-card/70 p-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-end">
-            <div className="flex-1">
-              <Label>Search</Label>
-              <Input
-                placeholder="Search by admission number or name..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div className="grid w-full gap-3 lg:grid-cols-[minmax(220px,1fr)_200px_240px]">
+              <div className="w-full">
+                <Label>Search</Label>
+                <Input
+                  placeholder="Search by admission number or name..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+
+              <div className="w-full">
+                <Label>Class</Label>
+                <Select value={classFilter} onValueChange={setClassFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All classes</SelectItem>
+                    {classes.map((row) => (
+                      <SelectItem key={row.id} value={row.id}>
+                        {row.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="w-full">
+                <Label>Academic term</Label>
+                <Select value={termFilter} onValueChange={setTermFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All terms</SelectItem>
+                    {terms.map((term) => (
+                      <SelectItem key={term.id} value={term.id}>
+                        {formatTerm(term)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="w-full lg:w-52">
-              <Label>Class</Label>
-              <Select value={classFilter} onValueChange={setClassFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All classes</SelectItem>
-                  {classes.map((row) => (
-                    <SelectItem key={row.id} value={row.id}>
-                      {row.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="w-full lg:w-52">
-              <Label>Academic term</Label>
-              <Select value={termFilter} onValueChange={setTermFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All terms</SelectItem>
-                  {terms.map((term) => (
-                    <SelectItem key={term.id} value={term.id}>
-                      {formatTerm(term)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
             {canManage ? (
               <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogTrigger asChild>
@@ -805,47 +806,48 @@ export function StudentsManager({ canManage }: { canManage: boolean }) {
             <RefreshCcw className="h-4 w-4" />
             Refresh
           </Button>
-        </div>
-      </div>
-      </div>
-
-      <div className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/70 p-4">
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <Badge variant="secondary">{totalCount} students</Badge>
-          <span className="text-xs text-muted-foreground">
-            Showing {pageStart}-{pageEnd} of {totalCount}
-          </span>
-          {classFilter !== 'all' ? (
-            <Badge variant="outline">Class: {classById.get(classFilter)?.name || 'Selected'}</Badge>
-          ) : null}
-          {termFilter !== 'all' ? (
-            <Badge variant="outline">Term: {termById.get(termFilter)?.term_name || 'Selected'}</Badge>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Switch checked={groupedView} onCheckedChange={setGroupedView} />
-              <Label className="text-xs text-muted-foreground">Grouped by class</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={compactView} onCheckedChange={setCompactView} />
-              <Label className="text-xs text-muted-foreground">Compact rows</Label>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground">Per page</Label>
-            <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
-              <SelectTrigger className="h-8 w-[90px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="25">25</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge variant="secondary">{totalCount} students</Badge>
+              <span className="text-muted-foreground">
+                Showing {pageStart}-{pageEnd} of {totalCount}
+              </span>
+              {classFilter !== 'all' ? (
+                <Badge variant="outline">Class: {classById.get(classFilter)?.name || 'Selected'}</Badge>
+              ) : null}
+              {termFilter !== 'all' ? (
+                <Badge variant="outline">
+                  Term: {termById.get(termFilter) ? formatTerm(termById.get(termFilter)!) : 'Selected'}
+                </Badge>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Switch checked={groupedView} onCheckedChange={setGroupedView} />
+                <Label className="text-xs text-muted-foreground">Grouped by class</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={compactView} onCheckedChange={setCompactView} />
+                <Label className="text-xs text-muted-foreground">Compact rows</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground">Per page</Label>
+                <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+                  <SelectTrigger className="h-8 w-[90px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -859,37 +861,37 @@ export function StudentsManager({ canManage }: { canManage: boolean }) {
           <p className="text-muted-foreground">No students found for selected filters.</p>
         </div>
       ) : groupedView ? (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-border/60 bg-card/70 p-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap gap-2">
-                {groupedStudents.map((group) => (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-border/60 bg-card/70 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-1 gap-2 overflow-x-auto pb-1">
+                  {groupedStudents.map((group) => (
+                    <Button
+                      key={group.classId}
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-2"
+                      onClick={() => handleJumpToGroup(group.classId)}
+                    >
+                      {group.className}
+                      <span className="text-xs text-muted-foreground">{group.rows.length}</span>
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
                   <Button
-                    key={group.classId}
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="gap-2"
-                    onClick={() => handleJumpToGroup(group.classId)}
+                    onClick={() => setOpenGroups(groupedStudents.map((group) => group.classId))}
                   >
-                    {group.className}
-                    <span className="text-xs text-muted-foreground">{group.rows.length}</span>
+                    Expand all
                   </Button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setOpenGroups(groupedStudents.map((group) => group.classId))}
-                >
-                  Expand all
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setOpenGroups([])}>
-                  Collapse all
-                </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setOpenGroups([])}>
+                    Collapse all
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
 
           <Accordion
             type="multiple"
@@ -911,9 +913,6 @@ export function StudentsManager({ canManage }: { canManage: boolean }) {
                     <span className="text-sm font-semibold">{group.className}</span>
                     <Badge variant="secondary">{group.rows.length} students</Badge>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    Page {currentPage} of {totalPages}
-                  </span>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="max-h-[60vh] overflow-auto">

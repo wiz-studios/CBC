@@ -76,11 +76,11 @@ async function requireStaff(): Promise<AuthResult> {
   return auth
 }
 
-async function requireSchoolAdminOrHeadTeacher(): Promise<AuthResult> {
+async function requireSchoolAdmin(): Promise<AuthResult> {
   const auth = await requireSignedIn()
   if (!auth.ok) return auth
-  if (auth.user.role !== 'SCHOOL_ADMIN' && auth.user.role !== 'HEAD_TEACHER') {
-    return { ok: false, error: { code: 'forbidden', message: 'Admin access required.' } }
+  if (auth.user.role !== 'SCHOOL_ADMIN') {
+    return { ok: false, error: { code: 'forbidden', message: 'School admin access required.' } }
   }
   return auth
 }
@@ -96,6 +96,35 @@ async function getTeacherIdForUser(userId: string, schoolId: string) {
   if (error) throw error
   if (!teacher) throw new Error('Teacher profile not found for this user.')
   return (teacher as any).id as string
+}
+
+async function isTeacherAssignedTo(input: {
+  teacherId: string
+  classId: string
+  subjectId: string
+  academicTermId: string
+}) {
+  const { data: assignment, error: assignmentError } = await admin
+    .from('teacher_class_assignments')
+    .select('id')
+    .eq('teacher_id', input.teacherId)
+    .eq('class_id', input.classId)
+    .eq('subject_id', input.subjectId)
+    .eq('academic_term_id', input.academicTermId)
+    .maybeSingle()
+  if (assignmentError) throw assignmentError
+  if (assignment) return true
+
+  const { data: slot, error: slotError } = await admin
+    .from('timetable_slots')
+    .select('id')
+    .eq('teacher_id', input.teacherId)
+    .eq('class_id', input.classId)
+    .eq('subject_id', input.subjectId)
+    .eq('academic_term_id', input.academicTermId)
+    .maybeSingle()
+  if (slotError) throw slotError
+  return !!slot
 }
 
 export async function getAssessmentTypes(): Promise<AssessmentTypesResult> {
@@ -122,7 +151,7 @@ export async function createAssessmentType(input: {
   weight: number
   max_score?: number | null
 }): Promise<AssessmentTypeResult> {
-  const auth = await requireSchoolAdminOrHeadTeacher()
+  const auth = await requireSchoolAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
@@ -173,7 +202,7 @@ export async function updateAssessmentType(
   id: string,
   updates: Partial<Pick<AssessmentTypeRow, 'name' | 'weight' | 'max_score' | 'is_active'>>
 ): Promise<AssessmentTypeResult> {
-  const auth = await requireSchoolAdminOrHeadTeacher()
+  const auth = await requireSchoolAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
@@ -246,10 +275,18 @@ export async function createAssessment(input: {
   max_score?: number | null
   teacher_id?: string | null
 }): Promise<AssessmentResult> {
-  const auth = await requireStaff()
+  const auth = await requireSignedIn()
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
+    const canCreate = auth.user.role === 'TEACHER' || auth.user.role === 'HEAD_TEACHER'
+    if (!canCreate) {
+      return {
+        success: false,
+        error: { code: 'forbidden', message: 'Only teachers or head teachers can create assessments.' },
+      }
+    }
+
     const title = input.title.trim()
     if (!title) return { success: false, error: { code: 'invalid_input', message: 'Title is required.' } }
 
@@ -260,6 +297,49 @@ export async function createAssessment(input: {
 
     if (!teacherId) {
       return { success: false, error: { code: 'invalid_input', message: 'Teacher is required.' } }
+    }
+
+    if (auth.user.role === 'TEACHER') {
+      const assigned = await isTeacherAssignedTo({
+        teacherId,
+        classId: input.class_id,
+        subjectId: input.subject_id,
+        academicTermId: input.academic_term_id,
+      })
+      if (!assigned) {
+        return {
+          success: false,
+          error: { code: 'forbidden', message: 'You can only create assessments for your assigned classes and subjects.' },
+        }
+      }
+    }
+
+    if (auth.user.role === 'HEAD_TEACHER') {
+      const { data: teacherRow, error: teacherError } = await admin
+        .from('teachers')
+        .select('id, school_id')
+        .eq('id', teacherId)
+        .maybeSingle()
+      if (teacherError) throw teacherError
+      if (!teacherRow || (teacherRow as any).school_id !== auth.user.school_id) {
+        return { success: false, error: { code: 'invalid_teacher', message: 'Teacher does not belong to this school.' } }
+      }
+
+      const assigned = await isTeacherAssignedTo({
+        teacherId,
+        classId: input.class_id,
+        subjectId: input.subject_id,
+        academicTermId: input.academic_term_id,
+      })
+      if (!assigned) {
+        return {
+          success: false,
+          error: {
+            code: 'unassigned_teacher',
+            message: 'Assign the teacher to this class and subject before creating an assessment.',
+          },
+        }
+      }
     }
 
     const { data: assessmentType, error: typeError } = await admin
@@ -310,7 +390,7 @@ export async function createAssessment(input: {
 }
 
 export async function deleteAssessment(assessmentId: string): Promise<AssessmentResult> {
-  const auth = await requireSchoolAdminOrHeadTeacher()
+  const auth = await requireSchoolAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
@@ -353,6 +433,16 @@ export async function getAssessmentMarks(assessmentId: string): Promise<Assessme
       .single()
 
     if (assessmentError) throw assessmentError
+
+    if (auth.user.role === 'TEACHER') {
+      const teacherId = await getTeacherIdForUser(auth.user.id, auth.user.school_id)
+      if ((assessment as any).teacher_id !== teacherId) {
+        return {
+          success: false,
+          error: { code: 'forbidden', message: 'You can only view marks for your assessments.' },
+        }
+      }
+    }
 
     const { data: classStudents, error: studentsError } = await supabase
       .from('students')

@@ -48,6 +48,16 @@ async function requireSignedIn(): Promise<AuthResult> {
   return { ok: true, user }
 }
 
+async function requireSchoolStaff(): Promise<AuthResult> {
+  const auth = await requireSignedIn()
+  if (!auth.ok) return auth
+  const allowed = auth.user.role === 'SCHOOL_ADMIN' || auth.user.role === 'HEAD_TEACHER' || auth.user.role === 'TEACHER'
+  if (!allowed) {
+    return { ok: false, error: { code: 'forbidden', message: 'School staff access required.' } }
+  }
+  return auth
+}
+
 async function requireSchoolAdmin(): Promise<AuthResult> {
   const auth = await requireSignedIn()
   if (!auth.ok) return auth
@@ -55,6 +65,39 @@ async function requireSchoolAdmin(): Promise<AuthResult> {
     return { ok: false, error: { code: 'forbidden', message: 'School admin access required.' } }
   }
   return auth
+}
+
+async function getTeacherIdForUser(userId: string, schoolId: string) {
+  const { data: teacher, error } = await admin
+    .from('teachers')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('school_id', schoolId)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!teacher) throw new Error('Teacher profile not found for this user.')
+  return (teacher as any).id as string
+}
+
+async function getTeacherSubjectIds(teacherId: string) {
+  const [{ data: assignments, error: assignmentError }, { data: slots, error: slotError }] = await Promise.all([
+    admin
+      .from('teacher_class_assignments')
+      .select('subject_id')
+      .eq('teacher_id', teacherId),
+    admin
+      .from('timetable_slots')
+      .select('subject_id')
+      .eq('teacher_id', teacherId),
+  ])
+  if (assignmentError) throw assignmentError
+  if (slotError) throw slotError
+
+  const subjectIds = new Set<string>()
+  ;(assignments ?? []).forEach((row: any) => row.subject_id && subjectIds.add(row.subject_id))
+  ;(slots ?? []).forEach((row: any) => row.subject_id && subjectIds.add(row.subject_id))
+  return Array.from(subjectIds)
 }
 
 type SubjectSeed = {
@@ -385,17 +428,29 @@ export async function createSubject(input: {
 }
 
 export async function getSubjects(params?: { schoolId?: string }): Promise<SubjectsResult> {
-  const auth = await requireSignedIn()
+  const auth = await requireSchoolStaff()
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
-    const schoolId = auth.user.role === 'SUPER_ADMIN' && params?.schoolId ? params.schoolId : auth.user.school_id
+    const schoolId = auth.user.school_id
     const supabase = await createClient()
-    const { data: subjects, error } = await supabase
+
+    let query = supabase
       .from('subjects')
       .select('*')
       .eq('school_id', schoolId)
       .order('name', { ascending: true })
+
+    if (auth.user.role === 'TEACHER') {
+      const teacherId = await getTeacherIdForUser(auth.user.id, auth.user.school_id)
+      const subjectIds = await getTeacherSubjectIds(teacherId)
+      if (subjectIds.length === 0) {
+        return { success: true, subjects: [] }
+      }
+      query = query.in('id', subjectIds)
+    }
+
+    const { data: subjects, error } = await query
 
     if (error) throw error
     return { success: true, subjects: (subjects ?? []) as SubjectRow[] }

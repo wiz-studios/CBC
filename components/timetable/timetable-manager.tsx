@@ -44,7 +44,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Edit, Plus, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { Download, Edit, Plus, Sparkles, Trash2, Wand2 } from 'lucide-react'
 
 type TermRow = Database['public']['Tables']['academic_terms']['Row']
 type ClassRow = Database['public']['Tables']['classes']['Row']
@@ -101,6 +101,17 @@ function getErrorMessage(error: unknown, fallback = 'Unexpected error') {
   if (error instanceof Error && error.message) return error.message
   if (typeof error === 'string' && error.trim()) return error
   return fallback
+}
+
+function escapeCsvValue(value: string) {
+  if (value.includes('"') || value.includes(',') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  return value
+}
+
+function toCsv(rows: string[][]) {
+  return rows.map((row) => row.map((cell) => escapeCsvValue(cell)).join(',')).join('\n')
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -169,6 +180,7 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
   const [autoElectives, setAutoElectives] = useState<string[]>([])
   const [autoTeacherMap, setAutoTeacherMap] = useState<Record<string, string>>({})
   const [autoStep, setAutoStep] = useState<1 | 2 | 3>(1)
+  const [downloading, setDownloading] = useState<'none' | 'full' | 'teacher'>('none')
   const autoEffectiveStart = autoDayTemplate === 'kenya_fixed' ? KENYA_FIXED_WINDOWS[0].start : autoStart
   const autoEffectivePeriodsPerDay =
     autoDayTemplate === 'kenya_fixed' ? getFixedTemplatePeriods(autoPeriodMinutes) : autoPeriodsPerDay
@@ -518,6 +530,99 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
     }
   }
 
+  const getDownloadFileName = useCallback(
+    (label: string) => {
+      const termLabel = currentTerm ? `${currentTerm.year}_T${currentTerm.term}` : 'term'
+      return `timetable_${termLabel}_${label}.csv`
+    },
+    [currentTerm]
+  )
+
+  const buildCsvRows = useCallback(
+    (items: TimetableSlotWithRefs[]) => {
+      const rows: string[][] = [
+        ['Day', 'Start', 'End', 'Class', 'Subject', 'Teacher', 'Room'],
+      ]
+      const sorted = [...items].sort((a, b) => {
+        if (a.day_of_week !== b.day_of_week) return a.day_of_week - b.day_of_week
+        if (a.start_time !== b.start_time) return a.start_time.localeCompare(b.start_time)
+        return a.class_id.localeCompare(b.class_id)
+      })
+
+      sorted.forEach((slot) => {
+        const day =
+          DAYS.find((d) => d.value === String(slot.day_of_week))?.label ?? `Day ${slot.day_of_week}`
+        rows.push([
+          day,
+          slot.start_time,
+          slot.end_time,
+          classLabel(slot.class_id),
+          subjectLabel(slot.subject_id),
+          teacherLabel(slot),
+          slot.room ?? '',
+        ])
+      })
+      return rows
+    },
+    [classLabel, subjectLabel, teacherLabel]
+  )
+
+  const triggerDownload = useCallback((rows: string[][], filename: string) => {
+    const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  const handleDownloadFull = async () => {
+    if (!selectedTermId) {
+      toast.error('Select an academic term first')
+      return
+    }
+    setDownloading('full')
+    const result = await getTimetableSlots({ academicTermId: selectedTermId })
+    if (!result.success) {
+      toast.error('Download failed', { description: result.error.message })
+      setDownloading('none')
+      return
+    }
+    const rows = buildCsvRows(result.slots)
+    triggerDownload(rows, getDownloadFileName('full'))
+    setDownloading('none')
+  }
+
+  const handleDownloadTeacher = async () => {
+    if (!selectedTermId) {
+      toast.error('Select an academic term first')
+      return
+    }
+    if (canManage && filterTeacherId === 'all') {
+      toast.error('Select a teacher to download their timetable')
+      return
+    }
+    setDownloading('teacher')
+    const result = await getTimetableSlots({
+      academicTermId: selectedTermId,
+      teacherId: canManage ? filterTeacherId : undefined,
+    })
+    if (!result.success) {
+      toast.error('Download failed', { description: result.error.message })
+      setDownloading('none')
+      return
+    }
+    const teacherName = canManage
+      ? teachers.find((t) => t.id === filterTeacherId)?.label?.replace(/\s+/g, '_') ?? 'teacher'
+      : 'my_timetable'
+    const rows = buildCsvRows(result.slots)
+    triggerDownload(rows, getDownloadFileName(teacherName))
+    setDownloading('none')
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-border/60 bg-card/70 p-4">
@@ -579,6 +684,32 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {canManage ? (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => void handleDownloadFull()}
+                disabled={!selectedTermId || downloading !== 'none'}
+              >
+                <Download className="h-4 w-4" />
+                {downloading === 'full' ? 'Preparing...' : 'Download full'}
+              </Button>
+            ) : null}
+
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => void handleDownloadTeacher()}
+              disabled={!selectedTermId || (canManage && filterTeacherId === 'all') || downloading !== 'none'}
+            >
+              <Download className="h-4 w-4" />
+              {downloading === 'teacher'
+                ? 'Preparing...'
+                : canManage
+                  ? 'Download teacher'
+                  : 'Download my timetable'}
+            </Button>
+
             {canManage ? (
               <Dialog open={seedOpen} onOpenChange={setSeedOpen}>
                 <DialogTrigger asChild>

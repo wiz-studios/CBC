@@ -48,6 +48,15 @@ async function requireSignedIn(): Promise<AuthResult> {
   return { ok: true, user }
 }
 
+async function requireSchoolAdmin(): Promise<AuthResult> {
+  const auth = await requireSignedIn()
+  if (!auth.ok) return auth
+  if (auth.user.role !== 'SCHOOL_ADMIN') {
+    return { ok: false, error: { code: 'forbidden', message: 'School admin access required.' } }
+  }
+  return auth
+}
+
 async function requireSchoolAdminOrHeadTeacher(): Promise<AuthResult> {
   const auth = await requireSignedIn()
   if (!auth.ok) return auth
@@ -145,7 +154,7 @@ export type ResultsSettingsResult =
   | { success: false; error: ActionError }
 
 export async function getResultsSettings(): Promise<ResultsSettingsResult> {
-  const auth = await requireSchoolAdminOrHeadTeacher()
+  const auth = await requireSchoolAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
@@ -233,7 +242,7 @@ export async function updateResultsSettings(input: {
     Pick<SubjectResultsProfileRow, 'subject_id' | 'cat_weight' | 'exam_weight' | 'excluded_from_ranking'>
   >
 }): Promise<{ success: true } | { success: false; error: ActionError }> {
-  const auth = await requireSchoolAdminOrHeadTeacher()
+  const auth = await requireSchoolAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
