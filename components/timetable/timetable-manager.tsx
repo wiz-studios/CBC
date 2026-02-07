@@ -84,6 +84,11 @@ const KENYA_FIXED_WINDOWS = [
   { start: '14:00', end: '16:00', label: 'Afternoon classes' },
 ]
 
+const KENYA_BREAK_WINDOWS = [
+  { start: '10:30', end: '11:00', label: 'Morning break' },
+  { start: '13:00', end: '14:00', label: 'Lunch break' },
+]
+
 function toMinutes(time: string) {
   const [hours, minutes] = time.split(':').map(Number)
   return hours * 60 + minutes
@@ -103,15 +108,49 @@ function getErrorMessage(error: unknown, fallback = 'Unexpected error') {
   return fallback
 }
 
-function escapeCsvValue(value: string) {
-  if (value.includes('"') || value.includes(',') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`
-  }
-  return value
+type TimeRow = {
+  start: string
+  end: string
+  label: string
+  isBreak: boolean
+  breakLabel: string
 }
 
-function toCsv(rows: string[][]) {
-  return rows.map((row) => row.map((cell) => escapeCsvValue(cell)).join(',')).join('\n')
+function buildTimeRows(slots: TimetableSlotWithRefs[]): TimeRow[] {
+  const rows = new Map<string, TimeRow>()
+
+  slots.forEach((slot) => {
+    const key = `${slot.start_time}-${slot.end_time}`
+    if (!rows.has(key)) {
+      rows.set(key, {
+        start: slot.start_time,
+        end: slot.end_time,
+        label: `${slot.start_time}-${slot.end_time}`,
+        isBreak: false,
+        breakLabel: '',
+      })
+    }
+  })
+
+  KENYA_BREAK_WINDOWS.forEach((breakWindow) => {
+    const key = `break-${breakWindow.start}-${breakWindow.end}`
+    if (!rows.has(key)) {
+      rows.set(key, {
+        start: breakWindow.start,
+        end: breakWindow.end,
+        label: `${breakWindow.start}-${breakWindow.end}`,
+        isBreak: true,
+        breakLabel: breakWindow.label,
+      })
+    }
+  })
+
+  return Array.from(rows.values()).sort((a, b) => {
+    const delta = toMinutes(a.start) - toMinutes(b.start)
+    if (delta !== 0) return delta
+    if (a.isBreak === b.isBreak) return 0
+    return a.isBreak ? 1 : -1
+  })
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -297,6 +336,12 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
   )
 
   const canCreate = canManage && !!selectedTermId
+  const showWeekView = filterClassId !== 'all' || filterTeacherId !== 'all'
+  const weekViewMode = useMemo<'class' | 'teacher' | 'full'>(() => {
+    if (filterClassId !== 'all') return 'class'
+    if (filterTeacherId !== 'all') return 'teacher'
+    return 'full'
+  }, [filterClassId, filterTeacherId])
 
   const seniorClasses = useMemo(
     () => classes.filter((c) => c.is_active && c.grade_level >= 10 && c.grade_level <= 12),
@@ -559,51 +604,130 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
   const getDownloadFileName = useCallback(
     (label: string) => {
       const termLabel = currentTerm ? `${currentTerm.year}_T${currentTerm.term}` : 'term'
-      return `timetable_${termLabel}_${label}.csv`
+      return `timetable_${termLabel}_${label}.pdf`
     },
     [currentTerm]
   )
 
-  const buildCsvRows = useCallback(
-    (items: TimetableSlotWithRefs[]) => {
-      const rows: string[][] = [
-        ['Day', 'Start', 'End', 'Class', 'Subject', 'Teacher', 'Room'],
-      ]
-      const sorted = [...items].sort((a, b) => {
-        if (a.day_of_week !== b.day_of_week) return a.day_of_week - b.day_of_week
-        if (a.start_time !== b.start_time) return a.start_time.localeCompare(b.start_time)
-        return a.class_id.localeCompare(b.class_id)
-      })
-
-      sorted.forEach((slot) => {
-        const day =
-          DAYS.find((d) => d.value === String(slot.day_of_week))?.label ?? `Day ${slot.day_of_week}`
-        rows.push([
-          day,
-          slot.start_time,
-          slot.end_time,
-          classLabel(slot.class_id),
-          subjectLabel(slot.subject_id),
-          teacherLabel(slot),
-          slot.room ?? '',
-        ])
-      })
-      return rows
+  const formatSlotForMode = useCallback(
+    (slot: TimetableSlotWithRefs, mode: 'class' | 'teacher' | 'full') => {
+      if (mode === 'class') {
+        return `${subjectLabel(slot.subject_id)}\n${teacherLabel(slot)}`
+      }
+      if (mode === 'teacher') {
+        return `${classLabel(slot.class_id)}\n${subjectLabel(slot.subject_id)}`
+      }
+      return `${classLabel(slot.class_id)}\n${subjectLabel(slot.subject_id)}\n${teacherLabel(slot)}`
     },
     [classLabel, subjectLabel, teacherLabel]
   )
 
-  const triggerDownload = useCallback((rows: string[][], filename: string) => {
-    const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-  }, [])
+  const buildWeekRows = useCallback(
+    (items: TimetableSlotWithRefs[], mode: 'class' | 'teacher' | 'full') => {
+      const rows = buildTimeRows(items)
+      const slotMap = new Map<string, TimetableSlotWithRefs[]>()
+
+      items.forEach((slot) => {
+        const key = `${slot.day_of_week}-${slot.start_time}-${slot.end_time}`
+        const existing = slotMap.get(key) ?? []
+        existing.push(slot)
+        slotMap.set(key, existing)
+      })
+
+      return rows.map((row) => {
+        const cells: Record<string, string> = {}
+        if (!row.isBreak) {
+          DAYS.forEach((day) => {
+            const key = `${day.value}-${row.start}-${row.end}`
+            const matches = slotMap.get(key) ?? []
+            cells[day.value] = matches.map((slot) => formatSlotForMode(slot, mode)).join('\n')
+          })
+        }
+        return { ...row, cells }
+      })
+    },
+    [formatSlotForMode]
+  )
+
+  const weekRows = useMemo(() => buildWeekRows(slots, weekViewMode), [buildWeekRows, slots, weekViewMode])
+
+  const buildPdfRows = useCallback(
+    (items: TimetableSlotWithRefs[], mode: 'class' | 'teacher' | 'full') => {
+      const rows = buildWeekRows(items, mode)
+      const breakRowIndexes = new Set<number>()
+      const body = rows.map((row, index) => {
+        if (row.isBreak) breakRowIndexes.add(index)
+        return [
+          row.label,
+          ...DAYS.map((day) => (row.isBreak ? row.breakLabel : row.cells[day.value] || '')),
+        ]
+      })
+      return { body, breakRowIndexes }
+    },
+    [buildWeekRows]
+  )
+
+  const renderPdfTable = useCallback(
+    async (
+      doc: any,
+      autoTable: any,
+      items: TimetableSlotWithRefs[],
+      title: string,
+      subtitle: string,
+      mode: 'class' | 'teacher' | 'full'
+    ) => {
+      const { body, breakRowIndexes } = buildPdfRows(items, mode)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(16)
+      doc.text(title, 40, 36)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(10)
+      doc.text(subtitle, 40, 54)
+
+      autoTable(doc, {
+        startY: 70,
+        head: [['Time', ...DAYS.map((d) => d.label)]],
+        body,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 4, valign: 'middle' },
+        headStyles: { fillColor: [32, 32, 32], textColor: 255, fontStyle: 'bold' },
+        didParseCell: (data: any) => {
+          if (breakRowIndexes.has(data.row.index)) {
+            data.cell.styles.fillColor = [245, 245, 245]
+            data.cell.styles.textColor = [80, 80, 80]
+            data.cell.styles.fontStyle = 'bold'
+          }
+        },
+      })
+    },
+    [buildPdfRows]
+  )
+
+  const downloadPdf = useCallback(
+    async (
+      groups: Array<{ label: string; items: TimetableSlotWithRefs[] }>,
+      filename: string,
+      subtitle: string,
+      mode: 'class' | 'teacher' | 'full'
+    ) => {
+      const { jsPDF } = await import('jspdf')
+      const autoTableModule: any = await import('jspdf-autotable')
+      const autoTable = autoTableModule.default ?? autoTableModule
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+      let isFirst = true
+
+      for (const group of groups) {
+        if (!isFirst) doc.addPage()
+        const title = `Weekly Timetable - ${group.label}`
+        await renderPdfTable(doc, autoTable, group.items, title, subtitle, mode)
+        isFirst = false
+      }
+
+      doc.save(filename)
+    },
+    [renderPdfTable]
+  )
 
   const handleDownloadFull = async () => {
     if (!selectedTermId) {
@@ -617,8 +741,30 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       setDownloading('none')
       return
     }
-    const rows = buildCsvRows(result.slots)
-    triggerDownload(rows, getDownloadFileName('full'))
+    const slotsToUse = result.slots
+    if (slotsToUse.length === 0) {
+      toast.error('No timetable slots available to download')
+      setDownloading('none')
+      return
+    }
+
+    const subtitle = currentTerm
+      ? `Term: ${currentTerm.year} T${currentTerm.term}${currentTerm.is_current ? ' (Current)' : ''}`
+      : 'Term: Not set'
+
+    const groupMap = new Map<string, TimetableSlotWithRefs[]>()
+    slotsToUse.forEach((slot) => {
+      const key = slot.class_id
+      const existing = groupMap.get(key) ?? []
+      existing.push(slot)
+      groupMap.set(key, existing)
+    })
+
+    const groups = Array.from(groupMap.entries())
+      .map(([classId, items]) => ({ label: classLabel(classId), items }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+
+    await downloadPdf(groups, getDownloadFileName('full_weekly'), subtitle, 'class')
     setDownloading('none')
   }
 
@@ -644,8 +790,15 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
     const teacherName = canManage
       ? teachers.find((t) => t.id === filterTeacherId)?.label?.replace(/\s+/g, '_') ?? 'teacher'
       : 'my_timetable'
-    const rows = buildCsvRows(result.slots)
-    triggerDownload(rows, getDownloadFileName(teacherName))
+    if (result.slots.length === 0) {
+      toast.error('No timetable slots available to download')
+      setDownloading('none')
+      return
+    }
+    const subtitle = currentTerm
+      ? `Term: ${currentTerm.year} T${currentTerm.term}${currentTerm.is_current ? ' (Current)' : ''}`
+      : 'Term: Not set'
+    await downloadPdf([{ label: teacherName.replace(/_/g, ' '), items: result.slots }], getDownloadFileName(teacherName), subtitle, 'teacher')
     setDownloading('none')
   }
 
@@ -718,7 +871,7 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
                 disabled={!selectedTermId || downloading !== 'none'}
               >
                 <Download className="h-4 w-4" />
-                {downloading === 'full' ? 'Preparing...' : 'Download full'}
+                {downloading === 'full' ? 'Preparing PDF...' : 'Download full PDF'}
               </Button>
             ) : null}
 
@@ -730,10 +883,10 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
             >
               <Download className="h-4 w-4" />
               {downloading === 'teacher'
-                ? 'Preparing...'
+                ? 'Preparing PDF...'
                 : canManage
-                  ? 'Download teacher'
-                  : 'Download my timetable'}
+                  ? 'Download teacher PDF'
+                  : 'Download my PDF'}
             </Button>
 
           {canManage ? (
@@ -1372,50 +1525,93 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
           <p className="text-muted-foreground">No timetable slots found for this term.</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border/60 bg-card/80 overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Slot</TableHead>
-                <TableHead>Class</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Teacher</TableHead>
-                <TableHead>Room</TableHead>
-                <TableHead>Status</TableHead>
-                {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {slots.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium">{slotLabel(s)}</TableCell>
-                  <TableCell>{classLabel(s.class_id)}</TableCell>
-                  <TableCell>{subjectLabel(s.subject_id)}</TableCell>
-                  <TableCell className="text-muted-foreground">{teacherLabel(s)}</TableCell>
-                  <TableCell className="text-muted-foreground">{s.room || '-'}</TableCell>
-                  <TableCell>{s ? <Badge variant="outline">OK</Badge> : null}</TableCell>
-                  {canManage ? (
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(s)} aria-label="Edit slot">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700"
-                          onClick={() => setDeleteTarget(s)}
-                          aria-label="Delete slot"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+        <div className="space-y-4">
+          {showWeekView ? (
+            <div className="rounded-2xl border border-border/60 bg-card/80 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">Weekly view</div>
+                  <div className="text-xs text-muted-foreground">
+                    Breaks included: 10:30-11:00 and 13:00-14:00
+                  </div>
+                </div>
+                <Badge variant="outline">Read-only</Badge>
+              </div>
+              <div className="mt-4 overflow-auto">
+                <div className="min-w-[920px]">
+                  <div className="grid grid-cols-[140px_repeat(5,minmax(0,1fr))] border-b border-border/60 bg-muted/40">
+                    <div className="px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">Time</div>
+                    {DAYS.map((day) => (
+                      <div key={day.value} className="px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+                        {day.label}
                       </div>
-                    </TableCell>
-                  ) : null}
+                    ))}
+                  </div>
+                  {weekRows.map((row) => (
+                    <div
+                      key={`${row.start}-${row.end}-${row.isBreak ? 'break' : 'slot'}`}
+                      className={`grid grid-cols-[140px_repeat(5,minmax(0,1fr))] border-b border-border/60 ${
+                        row.isBreak ? 'bg-muted/30' : 'bg-background/60'
+                      }`}
+                    >
+                      <div className="px-3 py-2 text-xs font-medium text-muted-foreground">{row.label}</div>
+                      {DAYS.map((day) => (
+                        <div key={day.value} className="px-3 py-2 text-xs whitespace-pre-line">
+                          {row.isBreak ? row.breakLabel : row.cells[day.value] || '—'}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="rounded-2xl border border-border/60 bg-card/80 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Slot</TableHead>
+                  <TableHead>Class</TableHead>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Teacher</TableHead>
+                  <TableHead>Room</TableHead>
+                  <TableHead>Status</TableHead>
+                  {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {slots.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">{slotLabel(s)}</TableCell>
+                    <TableCell>{classLabel(s.class_id)}</TableCell>
+                    <TableCell>{subjectLabel(s.subject_id)}</TableCell>
+                    <TableCell className="text-muted-foreground">{teacherLabel(s)}</TableCell>
+                    <TableCell className="text-muted-foreground">{s.room || '-'}</TableCell>
+                    <TableCell>{s ? <Badge variant="outline">OK</Badge> : null}</TableCell>
+                    {canManage ? (
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(s)} aria-label="Edit slot">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700"
+                            onClick={() => setDeleteTarget(s)}
+                            aria-label="Delete slot"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    ) : null}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 
