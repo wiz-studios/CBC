@@ -11,6 +11,7 @@ import { getTeachers, seedKerichoTeachersAndAssignments } from '@/lib/actions/te
 import { getMySchool } from '@/lib/actions/schools'
 import {
   createTimetableSlot,
+  clearTimetableSlots,
   deleteTimetableSlot,
   generateSeniorSchoolTimetable,
   getTimetableSlots,
@@ -43,6 +44,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogTrigger,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Download, Edit, Plus, Sparkles, Trash2, Wand2 } from 'lucide-react'
@@ -251,6 +253,8 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
 
   const [deleteTarget, setDeleteTarget] = useState<TimetableSlotWithRefs | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [clearOpen, setClearOpen] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
   const [genOpen, setGenOpen] = useState(false)
   const [genSaving, setGenSaving] = useState(false)
@@ -551,6 +555,21 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
     toast.success('Timetable slot deleted')
     setDeleting(false)
     setDeleteTarget(null)
+    await loadSlots()
+  }
+
+  const handleClearTimetable = async () => {
+    if (!selectedTermId) return
+    setClearing(true)
+    const result = await clearTimetableSlots(selectedTermId)
+    if (!result.success) {
+      toast.error('Clear failed', { description: result.error.message })
+      setClearing(false)
+      return
+    }
+    toast.success('Timetable cleared for the term')
+    setClearing(false)
+    setClearOpen(false)
     await loadSlots()
   }
 
@@ -1063,6 +1082,35 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {canManage ? (
+              <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    disabled={!selectedTermId || downloading !== 'none'}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Clear term timetable
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Clear timetable for this term?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This deletes all timetable slots for the selected term. You will need to auto-build or add slots again.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={clearing}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => void handleClearTimetable()} disabled={clearing}>
+                      {clearing ? 'Clearing...' : 'Clear timetable'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : null}
+
             {canManage ? (
               <Button
                 variant="outline"

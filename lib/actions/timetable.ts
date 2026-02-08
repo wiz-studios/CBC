@@ -676,3 +676,32 @@ export async function deleteTimetableSlot(id: string): Promise<TimetableSlotResu
   }
 }
 
+export async function clearTimetableSlots(academicTermId: string): Promise<TimetableResult> {
+  const auth = await requireSchoolAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  try {
+    const { data: deleted, error } = await admin
+      .from('timetable_slots')
+      .delete()
+      .eq('academic_term_id', academicTermId)
+      .select('id')
+
+    if (error) throw error
+
+    await admin.from('audit_logs').insert({
+      school_id: auth.user.school_id,
+      user_id: auth.user.id,
+      action: 'timetable:clear',
+      resource_type: 'timetable_slots',
+      resource_id: null,
+      changes: { academic_term_id: academicTermId, deleted: deleted?.length ?? 0 },
+    })
+
+    return { success: true, slots: [] }
+  } catch (error) {
+    console.error('Clear timetable slots error:', error)
+    return { success: false, error: toActionError(error) }
+  }
+}
+
