@@ -150,6 +150,12 @@ function sanitizeFilename(value: string) {
     .replace(/^_+|_+$/g, '')
 }
 
+function lastNameFromLabel(label: string) {
+  const cleaned = stripEmailLabel(label)
+  const parts = cleaned.split(/\s+/).filter(Boolean)
+  return parts.length > 0 ? parts[parts.length - 1] : cleaned
+}
+
 type TimeRow = {
   start: string
   end: string
@@ -379,6 +385,31 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       return found?.label ?? slot.teacher_id
     },
     [teachers]
+  )
+
+  const teacherShortLabel = useCallback(
+    (slot: TimetableSlotWithRefs) => {
+      const fromJoin = slot.teachers?.users
+      if (fromJoin) {
+        const honorific = fromJoin.honorific?.trim() || getHonorificFromName(`${fromJoin.first_name} ${fromJoin.last_name}`)
+        return `${honorific} ${fromJoin.last_name}`.trim()
+      }
+      const fallback = teacherLabel(slot)
+      const honorific = getHonorificFromName(fallback)
+      return `${honorific} ${lastNameFromLabel(fallback)}`.trim()
+    },
+    [teacherLabel]
+  )
+
+  const subjectCodeLabel = useCallback(
+    (slot: TimetableSlotWithRefs) => {
+      const code = slot.subjects?.code
+      if (code) return code.toUpperCase()
+      const fallback = subjectLabel(slot.subject_id)
+      const first = fallback.split(' - ')[0]
+      return first || fallback
+    },
+    [subjectLabel]
   )
 
   const canCreate = canManage && !!selectedTermId
@@ -658,14 +689,14 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
   const formatSlotForMode = useCallback(
     (slot: TimetableSlotWithRefs, mode: 'class' | 'teacher' | 'full') => {
       if (mode === 'class') {
-        return `${subjectLabel(slot.subject_id)}\n${teacherLabel(slot)}`
+        return `${subjectCodeLabel(slot)}\n${teacherShortLabel(slot)}`
       }
       if (mode === 'teacher') {
         return `${classLabel(slot.class_id)}\n${subjectLabel(slot.subject_id)}`
       }
       return `${classLabel(slot.class_id)}\n${subjectLabel(slot.subject_id)}\n${teacherLabel(slot)}`
     },
-    [classLabel, subjectLabel, teacherLabel]
+    [classLabel, subjectLabel, teacherLabel, teacherShortLabel, subjectCodeLabel]
   )
 
   const buildWeekRows = useCallback(
