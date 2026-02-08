@@ -421,7 +421,7 @@ export async function getCurrentUser() {
 
     const { data: school, error: schoolError } = await admin
       .from('schools')
-      .select('id, name, code, is_active')
+      .select('id, name, code, is_active, logo_url')
       .eq('id', (userData as any).school_id)
       .maybeSingle()
 

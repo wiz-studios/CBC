@@ -109,14 +109,23 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
   const filteredItems = navItems.filter((item) => item.roles.includes(user.role))
   const platformLabel = user.role === 'SUPER_ADMIN' ? 'Platform' : user.school?.name || 'School'
+  const showLogo = user.role !== 'SUPER_ADMIN' && user.school?.logo_url
 
   return (
     <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader className="gap-4 p-4 group-data-[collapsible=icon]:p-2">
         <div className="rounded-2xl border border-sidebar-border/80 bg-sidebar-accent/60 p-3 group-data-[collapsible=icon]:p-2">
           <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sidebar-primary to-sidebar-accent text-sidebar-primary-foreground text-sm font-semibold shadow-[0_12px_24px_-18px_hsl(var(--sidebar-primary)/0.9)]">
-              CBC
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-sidebar-primary to-sidebar-accent text-sidebar-primary-foreground text-sm font-semibold shadow-[0_12px_24px_-18px_hsl(var(--sidebar-primary)/0.9)]">
+              {showLogo ? (
+                <img
+                  src={user.school?.logo_url ?? ''}
+                  alt={`${platformLabel} logo`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                'CBC'
+              )}
             </div>
             <div className="flex flex-col group-data-[collapsible=icon]:hidden">
               <span className="text-sm font-semibold text-sidebar-foreground">CBC Academic</span>

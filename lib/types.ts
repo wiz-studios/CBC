@@ -12,5 +12,5 @@ export type UserRow = Database['public']['Tables']['users']['Row']
 export type CurrentUser = UserRow & {
   role: SystemRoleName
   roles: SystemRoleName[]
-  school: Pick<SchoolRow, 'id' | 'name' | 'code' | 'is_active'> | null
+  school: Pick<SchoolRow, 'id' | 'name' | 'code' | 'is_active' | 'logo_url'> | null
 }
