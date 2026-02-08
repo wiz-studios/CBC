@@ -25,6 +25,7 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ user }: DashboardHeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const showLogo = user.role !== 'SUPER_ADMIN' && !!user.school?.logo_url
 
   const pageTitle = (() => {
     if (pathname === '/dashboard') return 'Overview'
@@ -61,9 +62,24 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
       <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-10">
         <div className="flex items-center gap-3">
           <SidebarTrigger className="rounded-full bg-primary/10 hover:bg-primary/20" />
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.28em] text-muted-foreground">CBC Academic</p>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-primary/10">
+              {showLogo ? (
+                <img
+                  src={user.school?.logo_url ?? ''}
+                  alt={`${user.school?.name ?? 'School'} logo`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-xs font-semibold text-primary">CBC</span>
+              )}
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
+                {user.role === 'SUPER_ADMIN' ? 'CBC Academic' : user.school?.name ?? 'CBC Academic'}
+              </p>
             <h2 className="text-2xl font-semibold font-display">{pageTitle}</h2>
+            </div>
           </div>
         </div>
 
