@@ -84,9 +84,10 @@ type DayTemplate = 'continuous' | 'kenya_fixed'
 type TimeSlotRange = { start_time: string; end_time: string }
 
 const KENYA_FIXED_BLOCKS: Array<{ start: string; end: string; label: string }> = [
-  { start: '07:30', end: '10:30', label: 'Morning classes' },
-  { start: '11:00', end: '13:00', label: 'Midday classes' },
-  { start: '14:00', end: '16:00', label: 'Afternoon classes' },
+  { start: '08:20', end: '09:40', label: 'Lessons 1-2' },
+  { start: '09:50', end: '11:10', label: 'Lessons 3-4' },
+  { start: '11:40', end: '13:00', label: 'Lessons 5-6' },
+  { start: '14:00', end: '15:20', label: 'Lessons 7-8' },
 ]
 
 function parseTimeToMinutes(value: string) {
