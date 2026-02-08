@@ -81,14 +81,17 @@ function slotLabel(slot: TimetableSlotWithRefs) {
 }
 
 const KENYA_FIXED_WINDOWS = [
-  { start: '07:30', end: '10:30', label: 'Morning classes' },
-  { start: '11:00', end: '13:00', label: 'Midday classes' },
-  { start: '14:00', end: '16:00', label: 'Afternoon classes' },
+  { start: '08:20', end: '09:40', label: 'Lessons 1-2' },
+  { start: '09:50', end: '11:10', label: 'Lessons 3-4' },
+  { start: '11:40', end: '13:00', label: 'Lessons 5-6' },
+  { start: '14:00', end: '15:20', label: 'Lessons 7-8' },
 ]
 
 const KENYA_BREAK_WINDOWS = [
-  { start: '10:30', end: '11:00', label: 'Morning break' },
+  { start: '09:40', end: '09:50', label: 'Health break 1' },
+  { start: '11:10', end: '11:40', label: 'Health break 2' },
   { start: '13:00', end: '14:00', label: 'Lunch break' },
+  { start: '15:20', end: '16:45', label: 'Co-curricular' },
 ]
 
 function toMinutes(time: string) {
@@ -261,7 +264,7 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
   const [autoOpen, setAutoOpen] = useState(false)
   const [autoSaving, setAutoSaving] = useState(false)
   const [autoDayTemplate, setAutoDayTemplate] = useState<'kenya_fixed' | 'continuous'>('kenya_fixed')
-  const [autoStart, setAutoStart] = useState('07:30')
+  const [autoStart, setAutoStart] = useState('08:20')
   const [autoPeriodMinutes, setAutoPeriodMinutes] = useState(40)
   const [autoPeriodsPerDay, setAutoPeriodsPerDay] = useState(10)
   const [autoMaxTeacherPeriods, setAutoMaxTeacherPeriods] = useState(28)
@@ -692,7 +695,7 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
         return `${subjectCodeLabel(slot)}\n${teacherShortLabel(slot)}`
       }
       if (mode === 'teacher') {
-        return `${classLabel(slot.class_id)}\n${subjectLabel(slot.subject_id)}`
+        return `${classLabel(slot.class_id)}\n${subjectCodeLabel(slot)}`
       }
       return `${classLabel(slot.class_id)}\n${subjectLabel(slot.subject_id)}\n${teacherLabel(slot)}`
     },
@@ -1404,7 +1407,7 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
                       <div className="text-sm text-muted-foreground">Start time: {autoEffectiveStart}</div>
                       {autoDayTemplate === 'kenya_fixed' ? (
                         <div className="text-xs text-muted-foreground">
-                          Breaks: 10:30-11:00 and 13:00-14:00
+                          Breaks: 09:40-09:50, 11:10-11:40, 13:00-14:00, 15:20-16:45
                         </div>
                       ) : null}
                     </div>
