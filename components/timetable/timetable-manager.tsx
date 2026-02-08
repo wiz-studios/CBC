@@ -763,7 +763,6 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       })
 
       const breakColumnIndexes = new Set<number>()
-      const breakShortLabels = ['B1', 'B2', 'L', 'Co']
       const breakDisplayLabels = ['BREAK', 'BREAK', 'LUNCH', 'CO-CURR']
       let lessonIndex = 0
       let breakIndex = 0
@@ -771,17 +770,15 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
 
       const columns = timeRows.map((row, index) => {
         if (row.isBreak) {
-          const short = breakShortLabels[breakIndex] ?? `B${breakIndex + 1}`
           const display = breakDisplayLabels[breakIndex] ?? row.breakLabel.toUpperCase()
-          legendItems.push(`${short} ${row.label} (${row.breakLabel})`)
+          legendItems.push(`${row.label} (${row.breakLabel})`)
           breakColumnIndexes.add(index + 1)
           breakIndex += 1
-          return { ...row, short, display }
+          return { ...row, short: row.label, display }
         }
         lessonIndex += 1
-        const short = `P${lessonIndex}`
-        legendItems.push(`${short} ${row.label}`)
-        return { ...row, short, display: '' }
+        legendItems.push(row.label)
+        return { ...row, short: row.label, display: '' }
       })
 
       const head = ['Day', ...columns.map((col) => col.short)]
@@ -874,10 +871,10 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       })
 
       const legendY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 10 : 520
-      if (legendY + 24 < pageHeight) {
-        doc.setFontSize(8)
+      if (legendY + 18 < pageHeight) {
+        doc.setFontSize(7.5)
         doc.setTextColor(70)
-        const lineMax = 90
+        const lineMax = 110
         const lines: string[] = []
         let current = ''
         legendItems.forEach((item) => {
@@ -890,8 +887,8 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
           }
         })
         if (current) lines.push(current)
-        lines.slice(0, 2).forEach((line, idx) => {
-          doc.text(line, 40, legendY + idx * 12)
+        lines.slice(0, 1).forEach((line, idx) => {
+          doc.text(line, 40, legendY + idx * 10)
         })
       }
     },
