@@ -744,22 +744,40 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       })
 
       const breakColumnIndexes = new Set<number>()
-      const head = ['Day', ...timeRows.map((row, index) => {
-        if (row.isBreak) breakColumnIndexes.add(index + 1)
-        return row.isBreak ? `${row.label}\n${row.breakLabel}` : row.label
-      })]
+      const breakShortLabels = ['B1', 'B2', 'L', 'Co']
+      const breakDisplayLabels = ['BREAK', 'BREAK', 'LUNCH', 'CO-CURR']
+      let lessonIndex = 0
+      let breakIndex = 0
+      const legendItems: string[] = []
+
+      const columns = timeRows.map((row, index) => {
+        if (row.isBreak) {
+          const short = breakShortLabels[breakIndex] ?? `B${breakIndex + 1}`
+          const display = breakDisplayLabels[breakIndex] ?? row.breakLabel.toUpperCase()
+          legendItems.push(`${short} ${row.label} (${row.breakLabel})`)
+          breakColumnIndexes.add(index + 1)
+          breakIndex += 1
+          return { ...row, short, display }
+        }
+        lessonIndex += 1
+        const short = `P${lessonIndex}`
+        legendItems.push(`${short} ${row.label}`)
+        return { ...row, short, display: '' }
+      })
+
+      const head = ['Day', ...columns.map((col) => col.short)]
 
       const body = DAYS.map((day) => {
-        const rowCells = timeRows.map((row) => {
-          if (row.isBreak) return row.breakLabel
-          const key = `${day.value}-${row.start}-${row.end}`
+        const rowCells = columns.map((col) => {
+          if (col.isBreak) return col.display
+          const key = `${day.value}-${col.start}-${col.end}`
           const matches = slotMap.get(key) ?? []
           return matches.map((slot) => formatSlotForMode(slot, mode)).join('\n')
         })
         return [day.label, ...rowCells]
       })
 
-      return { head, body, breakColumnIndexes }
+      return { head, body, breakColumnIndexes, legendItems, timeColumnCount: columns.length }
     },
     [formatSlotForMode]
   )
@@ -773,7 +791,7 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       subtitle: string,
       mode: 'class' | 'teacher' | 'full'
     ) => {
-      const { head, body, breakColumnIndexes } = buildPdfMatrix(items, mode)
+      const { head, body, breakColumnIndexes, legendItems, timeColumnCount } = buildPdfMatrix(items, mode)
       const logoUrl = schoolProfile?.logo_url ?? ''
       const hasLogo = logoUrl.startsWith('data:image/jpeg') || logoUrl.startsWith('data:image/jpg')
       const titleX = hasLogo ? 96 : 40
@@ -793,17 +811,32 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
       doc.setFontSize(10.5)
       doc.text(subtitle, titleX, 56)
 
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const margin = 36
+      const dayWidth = 62
+      const available = pageWidth - margin * 2
+      const timeWidth = Math.max(42, Math.floor((available - dayWidth) / Math.max(1, timeColumnCount)))
+
+      const columnStyles: Record<number, any> = {
+        0: { fillColor: [245, 245, 245], fontStyle: 'bold', cellWidth: dayWidth },
+      }
+      for (let i = 1; i <= timeColumnCount; i += 1) {
+        columnStyles[i] = { cellWidth: timeWidth }
+      }
+
       autoTable(doc, {
         startY: 72,
         head: [head],
         body,
         theme: 'grid',
-        styles: { fontSize: 8.5, cellPadding: 5, valign: 'top', lineWidth: 0.6, lineColor: [220, 220, 220] },
+        styles: { fontSize: 7.6, cellPadding: 2.5, valign: 'middle', lineWidth: 0.5, lineColor: [225, 225, 225] },
         headStyles: { fillColor: [25, 25, 25], textColor: 255, fontStyle: 'bold', halign: 'center' },
         alternateRowStyles: { fillColor: [252, 252, 252] },
-        columnStyles: {
-          0: { fillColor: [245, 245, 245], fontStyle: 'bold', cellWidth: 70 },
-        },
+        columnStyles,
+        tableWidth: 'auto',
+        pageBreak: 'avoid',
+        rowPageBreak: 'avoid',
         didParseCell: (data: any) => {
           if (data.section === 'head' && breakColumnIndexes.has(data.column.index)) {
             data.cell.styles.fillColor = [230, 230, 230]
@@ -820,6 +853,28 @@ export function TimetableManager({ canManage }: { canManage: boolean }) {
           }
         },
       })
+
+      const legendY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 10 : 520
+      if (legendY + 24 < pageHeight) {
+        doc.setFontSize(8)
+        doc.setTextColor(70)
+        const lineMax = 90
+        const lines: string[] = []
+        let current = ''
+        legendItems.forEach((item) => {
+          const next = current ? `${current}  •  ${item}` : item
+          if (next.length > lineMax) {
+            lines.push(current)
+            current = item
+          } else {
+            current = next
+          }
+        })
+        if (current) lines.push(current)
+        lines.slice(0, 2).forEach((line, idx) => {
+          doc.text(line, 40, legendY + idx * 12)
+        })
+      }
     },
     [buildPdfMatrix, schoolProfile]
   )
